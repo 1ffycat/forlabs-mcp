@@ -1,0 +1,10 @@
+# HAR captures of the target site (may contain session/auth data) — never commit these.
+*.har
+
+# .NET build output
+bin/
+obj/
+
+# Local env/secrets
+.env
+*.local.json
