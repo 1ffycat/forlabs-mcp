@@ -10,7 +10,7 @@ Built by reverse-engineering a HAR capture of the Angular frontend's `lm-vendor/
 dotnet build src/ForlabsMcp
 ```
 
-Requires .NET 8 SDK.
+Requires the .NET 10 SDK (pinned in `global.json`, `rollForward: latestMinor` so any 10.x SDK works). Or skip installing a toolchain entirely and use the [Nix flake](#nix--nixos).
 
 ## Configure
 
@@ -23,7 +23,83 @@ The server authenticates as a normal Forlabs user (email/login + password — th
 | `FORLABS_BASE_URL` | no | `https://bki.forlabs.ru` |
 | `FORLABS_DOWNLOAD_DIR` | no | `%TEMP%/forlabs-mcp/downloads` |
 
-### Claude Code / Claude Desktop / Codex — `mcp.json`
+## Nix / NixOS
+
+A flake in this repo packages the server with `buildDotnetModule`, fully offline/reproducible (NuGet deps are locked in `nix/deps.json`).
+
+```
+nix build .#forlabs-mcp          # -> ./result/bin/ForlabsMcp
+nix run .#forlabs-mcp             # build + run directly
+```
+
+Try it end to end (reads FORLABS_USERNAME/PASSWORD from the environment):
+
+```
+FORLABS_USERNAME=you@example.com FORLABS_PASSWORD=yourpass nix run github:<you>/forlabs-mcp
+```
+
+### Importing into another flake (e.g. nix-openclaw)
+
+```nix
+{
+  inputs.forlabs-mcp.url = "github:<you>/forlabs-mcp"; # or "path:/abs/path" for local dev
+
+  outputs = { self, nixpkgs, forlabs-mcp, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ forlabs-mcp.overlays.default ]; # exposes pkgs.forlabs-mcp
+      };
+    in {
+      # use pkgs.forlabs-mcp, or forlabs-mcp.packages.${system}.default directly
+    };
+}
+```
+
+Either the overlay (`pkgs.forlabs-mcp`) or the direct package output (`forlabs-mcp.packages.${system}.default`) works — both point at the same derivation; `mainProgram` is set so `lib.getExe pkgs.forlabs-mcp` / `"${pkgs.forlabs-mcp}/bin/ForlabsMcp"` both resolve.
+
+### Regenerating `nix/deps.json`
+
+Needed whenever a `PackageReference` changes:
+
+```
+nix build .#forlabs-mcp.fetch-deps --no-link --print-out-paths
+$(nix build .#forlabs-mcp.fetch-deps --no-link --print-out-paths) ./nix/deps.json
+```
+
+Validated on NixOS-WSL (`nix build`, `nix flake check`, and a live stdio JSON-RPC round trip against the built binary all pass) as part of building this out.
+
+## Adding to Claude Code
+
+Easiest is the CLI, from this repo's directory:
+
+```
+claude mcp add forlabs -s user \
+  -e FORLABS_USERNAME=you@example.com \
+  -e FORLABS_PASSWORD=your-password \
+  -- dotnet run --project src/ForlabsMcp -c Release
+```
+
+`-s user` registers it globally (available in every project); use `-s project` instead to write it into this repo's `.mcp.json` and share it with collaborators (don't commit real credentials in that case — use `-s local` or a wrapper script that reads a `.env`).
+
+Faster startup — publish once and point at the binary directly instead of `dotnet run`:
+
+```
+dotnet publish src/ForlabsMcp -c Release -o publish
+claude mcp add forlabs -s user -e FORLABS_USERNAME=... -e FORLABS_PASSWORD=... -- R:/forlabs-mcp/publish/ForlabsMcp.exe
+```
+
+Or, via Nix (no .NET SDK needed at all):
+
+```
+nix build .#forlabs-mcp
+claude mcp add forlabs -s user -e FORLABS_USERNAME=... -e FORLABS_PASSWORD=... -- /nix/store/.../bin/ForlabsMcp
+```
+
+Check it's connected with `claude mcp list` / `claude mcp get forlabs`, or `/mcp` inside a Claude Code session.
+
+Equivalent manual config, if you prefer editing JSON directly (`~/.claude.json` for user scope, or `.mcp.json` for project scope):
 
 ```json
 {
@@ -38,16 +114,6 @@ The server authenticates as a normal Forlabs user (email/login + password — th
     }
   }
 }
-```
-
-For faster startup, publish once and point `command` at the built exe instead of `dotnet run`:
-
-```
-dotnet publish src/ForlabsMcp -c Release -o publish
-```
-
-```json
-"command": "R:/forlabs-mcp/publish/ForlabsMcp.exe"
 ```
 
 ## Tools

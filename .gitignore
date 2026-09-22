@@ -5,6 +5,10 @@
 bin/
 obj/
 
+# Nix build output symlinks
+result
+result-*
+
 # Local env/secrets
 .env
 *.local.json
