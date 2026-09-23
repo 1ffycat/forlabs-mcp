@@ -34,11 +34,10 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
         var target = date is null ? TodayLocal() : DateOnly.Parse(date);
 
         var (grid, schedule) = await FetchGridAndSchedule(streamId, ct);
-        var upperWeek = grid?["grid"]?["upperweek"]?.GetValue<int>() ?? 1;
         var positions = grid?["grid"]?["positions"]?.AsArray().ToList() ?? [];
         var today = TodayLocal();
 
-        var dayIndex = ScheduleMath.ResolveDayIndex(target, today, upperWeek);
+        var dayIndex = ScheduleMath.ResolveDayIndex(target, today);
         var lessons = JsonUtil.ArrayOf(schedule, "entries")
             .Where(e => e.Int("day") == dayIndex)
             .OrderBy(e => e.Int("position"))
@@ -68,7 +67,6 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
         var monday = ScheduleMath.MondayOf(anchor);
 
         var (grid, schedule) = await FetchGridAndSchedule(streamId, ct);
-        var upperWeek = grid?["grid"]?["upperweek"]?.GetValue<int>() ?? 1;
         var positions = grid?["grid"]?["positions"]?.AsArray().ToList() ?? [];
         var today = TodayLocal();
         var entries = JsonUtil.ArrayOf(schedule, "entries").ToList();
@@ -76,7 +74,7 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
         var days = Enumerable.Range(0, 7).Select(offset =>
         {
             var d = monday.AddDays(offset);
-            var dayIndex = ScheduleMath.ResolveDayIndex(d, today, upperWeek);
+            var dayIndex = ScheduleMath.ResolveDayIndex(d, today);
             var lessons = entries
                 .Where(e => e.Int("day") == dayIndex)
                 .OrderBy(e => e.Int("position"))
@@ -95,8 +93,8 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
 
     [McpServerTool(Name = "forlabs_get_raw_two_week_schedule"),
      Description("Returns the full raw two-week rotating schedule (all entries tagged with Forlabs' internal " +
-                  "day index 1-14, where 1-7 and 8-14 are the two alternating week variants) plus the grid " +
-                  "metadata (lesson time slots, which half is currently the 'upper' week). Prefer " +
+                  "day index 1-14, where 1-7 is the calendar week containing today as of this call and 8-14 " +
+                  "is the following week) plus the grid metadata (lesson time slots). Prefer " +
                   "forlabs_get_schedule_for_date / forlabs_get_schedule_for_week for normal use; use this only " +
                   "when you need the complete unresolved rotation.")]
     public async Task<string> GetRawTwoWeekSchedule(

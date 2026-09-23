@@ -14,7 +14,12 @@ Requires the .NET 10 SDK (pinned in `global.json`, `rollForward: latestMinor` so
 
 ## Prebuilt releases
 
-Tagging a release (`vX.Y.Z`) triggers a GitHub Actions workflow that builds self-contained, single-file binaries — no .NET runtime needed — for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and publishes them (with a `SHA256SUMS` file) to the repo's [Releases](../../releases) page. On NixOS, prefer the [flake](#nix--nixos) instead — it stays reproducible and lets you pin/update declaratively. Everywhere else, there's no auto-update: grab a new release manually when you want one.
+Tagging a release (`vX.Y.Z`) triggers a GitHub Actions workflow that builds single-file binaries for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and publishes them (with a `SHA256SUMS` file) to the repo's [Releases](../../releases) page — two variants per platform:
+
+- **`-standalone`** — self-contained, bundles its own .NET runtime. Larger download (~35-40 MB), zero prerequisites. Pick this unless you have a reason not to.
+- **`-runtime-dependent`** — much smaller (~5 MB), but needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) already installed. Worth it if you already have .NET 10 around (recent, up-to-date Windows 11 installs increasingly ship it, and it's a one-line install everywhere else) or are running several .NET tools and don't want N copies of the runtime.
+
+On NixOS, prefer the [flake](#nix--nixos) instead — it stays reproducible and lets you pin/update declaratively. Everywhere else, there's no auto-update: grab a new release manually when you want one.
 
 ## Configure
 
@@ -126,7 +131,7 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 
 **Discovery**
 - `forlabs_whoami` — student profile + own group.
-- `forlabs_list_subjects` — subjects for the current semester with their `study_id`.
+- `forlabs_list_subjects` — every subject Forlabs has on record for the group, current and past semesters alike, each tagged with its `study_id` and a `status` (current-semester subjects are `2`; finished ones are `3`).
 
 **Schedule**
 - `forlabs_get_schedule_for_date` — one day's classes (defaults to today). Good for a morning briefing.
@@ -134,9 +139,9 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - `forlabs_get_raw_two_week_schedule` — the raw, unresolved rotating 2-week grid.
 
 **Homework**
-- `forlabs_get_homework` — task list for a subject (title, points, deadline, status).
+- `forlabs_get_homework` — task list for a subject (title, points, deadline, status). `include_completed` toggles between "what's pending" and "what's already turned in".
 - `forlabs_get_homework_details` — full task content + attachment URLs + linked `assignment_id`.
-- `forlabs_get_upcoming_homework` — scans **every** subject for deadlines in the next N days. This is the one to use for an "what's due soon" agent briefing.
+- `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; see `forlabs_get_recent_activity` below for the "what did I already do" complement.
 - `forlabs_download_task_file` — downloads an attachment URL to local disk so a coding agent can open/use it directly.
 - `forlabs_get_course_materials` — chapter/material index for a subject.
 
@@ -146,6 +151,7 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 
 **Progress**
 - `forlabs_get_scores_summary` — credits/grade overview across all subjects.
+- `forlabs_get_recent_activity` — scans every current-semester subject's grading log for entries from the last N days. The "what did I do [recently]" counterpart to `forlabs_get_upcoming_homework`'s "what's due".
 - `forlabs_get_scoring_log`, `forlabs_get_attendance`, `forlabs_get_exams` — per-subject detail.
 
 ## Limitations
@@ -153,5 +159,6 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - **Read-only.** No homework submission, no chat replies, no test-taking — none of these appeared in the recorded HAR.
 - **Course material content** (`forlabs_get_course_materials`) only returns the chapter index (titles, `has_content`, block counts); the endpoint that returns a chapter's actual content blocks was never called during the capture, so it isn't implemented.
 - **Task status codes** (`pivot_status` 1/2/3) aren't documented anywhere in the API; the `status_hint` field is a best-effort guess from observed data, not a guarantee.
-- **Upper/lower week resolution.** Forlabs encodes its 2-week rotating schedule as a single `day` index 1-14 (1-7 and 8-14 = the two week variants) and tells you, live, which half is "this week" via `sched/get_grid`'s `upperweek` field. `forlabs_get_schedule_for_date/_for_week` derive any other date's half from the ISO-week parity distance to today — this was validated against the captured HAR (the grid's `upperweek: 2` on a Monday capture matched exactly the `day: 8-11` entries observed for that week and `day: 2/4/5` for the adjacent week), but hasn't been checked against a live account since the HAR is a single snapshot.
+- **"Current semester" filtering** (`forlabs_get_upcoming_homework`, `forlabs_get_recent_activity`) is inferred from a study's `status` field (`2` = current, `3` = finished) observed on one live account; it isn't documented by Forlabs either, so it's a best-effort heuristic, not a guarantee — though a much more reliable one than trying to guess "current" from task deadlines (see below).
+- **Two-week schedule resolution.** Forlabs encodes its rotating schedule as a single `day` index 1-14 (1-7 and 8-14 = two alternating week variants). `sched/get_grid`'s `upperweek` field looks like it should say which half is "this week", but empirically it does not track that (verified live against a known-correct date/class list — see `ScheduleMath`'s doc comment); `forlabs_get_schedule_for_date`/`_for_week` instead anchor day-range 1-7 to the calendar week containing "today" as of the call and alternate by parity for other weeks. This matches everything checked against a live account so far, but the underlying rotation logic is still inferred, not documented.
 - File attachment URLs point at a separate CDN (`matecdn.ru`) that appeared to require no auth in the capture.

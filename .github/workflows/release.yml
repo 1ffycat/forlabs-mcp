@@ -14,6 +14,7 @@ jobs:
     strategy:
       matrix:
         rid: [win-x64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+        self_contained: [true, false]
     steps:
       - uses: actions/checkout@v4
 
@@ -21,24 +22,33 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Derive version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
-      - name: Publish (self-contained, single-file)
+      - name: Derive version from tag and artifact naming
         run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          if [[ "${{ matrix.self_contained }}" == "true" ]]; then
+            echo "KIND=standalone" >> "$GITHUB_ENV"
+          else
+            echo "KIND=runtime-dependent" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish
+        run: |
+          extra=()
+          if [[ "${{ matrix.self_contained }}" == "true" ]]; then
+            extra+=(-p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true)
+          fi
           dotnet publish src/ForlabsMcp -c Release -r ${{ matrix.rid }} \
             -p:Version=${VERSION} \
             -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:EnableCompressionInSingleFile=true \
-            --self-contained true \
-            -o out/${{ matrix.rid }}
+            --self-contained ${{ matrix.self_contained }} \
+            "${extra[@]}" \
+            -o out/${{ matrix.rid }}-${KIND}
 
       - name: Package
         run: |
           mkdir -p dist
-          name="forlabs-mcp-${VERSION}-${{ matrix.rid }}"
-          cd out/${{ matrix.rid }}
+          name="forlabs-mcp-${VERSION}-${{ matrix.rid }}-${KIND}"
+          cd out/${{ matrix.rid }}-${KIND}
           if [[ "${{ matrix.rid }}" == win-* ]]; then
             zip -r "../../dist/${name}.zip" ForlabsMcp.exe
           else
@@ -48,7 +58,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.rid }}
+          name: dist-${{ matrix.rid }}-${{ matrix.self_contained }}
           path: dist/*
           if-no-files-found: error
 
@@ -68,10 +78,18 @@ jobs:
         working-directory: dist
         run: sha256sum * > SHA256SUMS
 
+      - name: Write release notes header
+        run: |
+          cat > notes.md <<'EOF'
+          Two builds per platform: **standalone** (self-contained, no .NET runtime needed — larger download) and **runtime-dependent** (needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) installed — smaller download). See the README's [Prebuilt releases](../../#prebuilt-releases) section for which to pick.
+
+          EOF
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
             --generate-notes

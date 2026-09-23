@@ -61,6 +61,52 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
         return JsonUtil.Pretty(new { stream_id = streamId, study_id = studyId, subject = subjectName, result = resp });
     }
 
+    [McpServerTool(Name = "forlabs_get_recent_activity"),
+     Description("Scans every subject in the student's *current* semester and returns grading events " +
+                  "(assessment log entries — points awarded, by whom, for what) from the last N days — the " +
+                  "complement to forlabs_get_upcoming_homework: 'what did I get graded on recently' rather " +
+                  "than 'what's still due'. Useful for a 'what did I do today/this week' recap.")]
+    public async Task<string> GetRecentActivity(
+        [Description("How many days back to look. Default 7.")] int? days_back,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
+        CancellationToken ct)
+    {
+        var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
+        var earliest = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-(days_back ?? 7));
+        var studies = await ctx.ListCurrentStudiesAsync(streamId, ct);
+
+        var perSubject = await Task.WhenAll(studies.Select(async s =>
+        {
+            var studyId = s.Int("id");
+            if (studyId is null) return [];
+            var resp = await api.GetScoringAsync(streamId, studyId.Value, ct);
+            return JsonUtil.ArrayOf(resp, "assessments")
+                .Where(a => a.Str("date") is not null && DateOnly.Parse(a.Str("date")!) >= earliest)
+                .Select(a => new
+                {
+                    subject = s.Str("verbose_name"),
+                    study_id = studyId.Value,
+                    date = a.Str("date"),
+                    credits = a["credits"]?.ToString(),
+                    lecturer = a.Str("lecturer_name"),
+                    cause = a.Str("cause"),
+                })
+                .ToArray();
+        }));
+
+        var activity = perSubject.SelectMany(x => x)
+            .OrderByDescending(x => x.date)
+            .ToList();
+
+        return JsonUtil.Pretty(new
+        {
+            stream_id = streamId,
+            since = earliest.ToString("yyyy-MM-dd"),
+            entry_count = activity.Count,
+            activity,
+        });
+    }
+
     [McpServerTool(Name = "forlabs_get_exams"),
      Description("Returns exam/test info for a subject: title, time limits, and — if already taken — the " +
                   "passing result (grade, points, percentage, credits earned).")]

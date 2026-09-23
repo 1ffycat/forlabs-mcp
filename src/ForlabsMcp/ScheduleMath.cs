@@ -1,12 +1,15 @@
 namespace ForlabsMcp;
 
 /// <summary>
-/// Forlabs encodes the two-week rotating schedule as a single "day" number 1..14:
-/// 1-7 = Mon..Sun of one week variant, 8-14 = Mon..Sun of the other. Which half is
-/// the "upper" (numerator) week right now is reported live by sched/get_grid as
-/// "upperweek" (1 or 2, matching the two halves 1-7 / 8-14). Since that field is
-/// evaluated by the server for "now", we anchor it to today's date and derive any
-/// other date's day-index from the parity of the ISO week distance to today.
+/// Forlabs encodes its two-week rotating schedule as a single "day" number 1..14:
+/// 1-7 = Mon..Sun of the calendar week containing "now" at the moment sched/get_schedule
+/// was called, 8-14 = Mon..Sun of the following calendar week. (sched/get_grid's "upperweek"
+/// field looks like it should tell you this directly, but empirically it does not track which
+/// half is "now" — verified live: on 2026-09-23 with upperweek=2, day-range 1-7 held the
+/// current week [confirmed empty that Wednesday] and day-range 8-14 held the *next* week's
+/// classes, i.e. the opposite of what the field's name suggests. So this class ignores it
+/// entirely and anchors day-range 1-7 to "today" directly, alternating by week-parity for
+/// dates further out — the two-week rotation is assumed to keep repeating from there.)
 /// </summary>
 public static class ScheduleMath
 {
@@ -16,17 +19,15 @@ public static class ScheduleMath
     public static DateOnly MondayOf(DateOnly date) => date.AddDays(-(IsoWeekday(date) - 1));
 
     /// <summary>
-    /// Resolves the 1..14 "day" index Forlabs uses for <paramref name="target"/>,
-    /// given that as of <paramref name="today"/> the live grid reported
-    /// <paramref name="upperWeekAtToday"/> (1 or 2, selecting the 1-7 / 8-14 half
-    /// that applies to *this* calendar week).
+    /// Resolves the 1..14 "day" index Forlabs uses for <paramref name="target"/>, given that
+    /// <paramref name="today"/> is the date the schedule was fetched for (so it anchors day 1-7
+    /// to today's calendar week).
     /// </summary>
-    public static int ResolveDayIndex(DateOnly target, DateOnly today, int upperWeekAtToday)
+    public static int ResolveDayIndex(DateOnly target, DateOnly today)
     {
         var weekDelta = (MondayOf(target).DayNumber - MondayOf(today).DayNumber) / 7;
-        var sameHalfAsToday = weekDelta % 2 == 0; // even distance => same half, odd => the other half
-        var half = sameHalfAsToday ? upperWeekAtToday : (upperWeekAtToday == 1 ? 2 : 1);
-        var offset = half == 2 ? 7 : 0;
+        var mod = ((weekDelta % 2) + 2) % 2; // 0 = same week-parity as today, 1 = the other
+        var offset = mod == 0 ? 0 : 7;
         return IsoWeekday(target) + offset;
     }
 

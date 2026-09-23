@@ -69,6 +69,20 @@ public sealed class ForlabsContext(ForlabsApi api)
     }
 
     /// <summary>
+    /// Studies (subjects) belonging to the current/active semester only — Forlabs keeps every
+    /// past semester's subjects in get_studies forever, distinguished only by a "status" field
+    /// (2 = current, 3 = finished; not documented anywhere, inferred from a live account where
+    /// every 2026/2027-semester-7 subject was 2 and every older one was 3). Used to keep
+    /// cross-subject digests (upcoming homework, recent grades) from resurfacing years-old,
+    /// long-dead-semester tasks that never got a terminal status.
+    /// </summary>
+    public async Task<List<JsonObject>> ListCurrentStudiesAsync(int streamId, CancellationToken ct)
+    {
+        var all = await ListStudiesAsync(streamId, ct);
+        return all.Where(s => s.Int("status") == 2).ToList();
+    }
+
+    /// <summary>
     /// Accepts either a numeric study_id (as a string) or a subject name / partial
     /// name (case-insensitive, substring match) and resolves it to a study_id.
     /// Throws with the list of candidate subjects when it can't find an unambiguous match.
