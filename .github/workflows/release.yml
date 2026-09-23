@@ -44,16 +44,15 @@ jobs:
             "${extra[@]}" \
             -o out/${{ matrix.rid }}-${KIND}
 
-      - name: Package
+      - name: Rename binary for release
         run: |
           mkdir -p dist
           name="forlabs-mcp-${VERSION}-${{ matrix.rid }}-${KIND}"
-          cd out/${{ matrix.rid }}-${KIND}
           if [[ "${{ matrix.rid }}" == win-* ]]; then
-            zip -r "../../dist/${name}.zip" ForlabsMcp.exe
+            cp out/${{ matrix.rid }}-${KIND}/ForlabsMcp.exe "dist/${name}.exe"
           else
-            chmod +x ForlabsMcp
-            tar -czf "../../dist/${name}.tar.gz" ForlabsMcp
+            cp out/${{ matrix.rid }}-${KIND}/ForlabsMcp "dist/${name}"
+            chmod +x "dist/${name}"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -82,6 +81,8 @@ jobs:
         run: |
           cat > notes.md <<'EOF'
           Two builds per platform: **standalone** (self-contained, no .NET runtime needed — larger download) and **runtime-dependent** (needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) installed — smaller download). See the README's [Prebuilt releases](../../#prebuilt-releases) section for which to pick.
+
+          Binaries are uploaded raw (no .zip/.tar.gz) — on Linux/macOS, `chmod +x` after downloading.
 
           EOF
 

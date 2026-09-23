@@ -19,6 +19,8 @@ Tagging a release (`vX.Y.Z`) triggers a GitHub Actions workflow that builds sing
 - **`-standalone`** — self-contained, bundles its own .NET runtime. Larger download (~35-40 MB), zero prerequisites. Pick this unless you have a reason not to.
 - **`-runtime-dependent`** — much smaller (~5 MB), but needs the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) already installed. Worth it if you already have .NET 10 around (recent, up-to-date Windows 11 installs increasingly ship it, and it's a one-line install everywhere else) or are running several .NET tools and don't want N copies of the runtime.
 
+Each is uploaded as the raw binary — no `.zip`/`.tar.gz` — so it's ready to run as soon as it's downloaded. On Linux/macOS, mark it executable first: `chmod +x forlabs-mcp-*`.
+
 On NixOS, prefer the [flake](#nix--nixos) instead — it stays reproducible and lets you pin/update declaratively. Everywhere else, there's no auto-update: grab a new release manually when you want one.
 
 ## Configure
