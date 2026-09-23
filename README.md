@@ -35,14 +35,14 @@ nix run .#forlabs-mcp             # build + run directly
 Try it end to end (reads FORLABS_USERNAME/PASSWORD from the environment):
 
 ```
-FORLABS_USERNAME=you@example.com FORLABS_PASSWORD=yourpass nix run github:<you>/forlabs-mcp
+FORLABS_USERNAME=you@example.com FORLABS_PASSWORD=yourpass nix run github:1ffycat/forlabs-mcp
 ```
 
 ### Importing into another flake (e.g. nix-openclaw)
 
 ```nix
 {
-  inputs.forlabs-mcp.url = "github:<you>/forlabs-mcp"; # or "path:/abs/path" for local dev
+  inputs.forlabs-mcp.url = "github:1ffycat/forlabs-mcp"; # or "path:/abs/path" for local dev
 
   outputs = { self, nixpkgs, forlabs-mcp, ... }:
     let
