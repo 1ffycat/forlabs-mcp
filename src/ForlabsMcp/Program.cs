@@ -1,7 +1,13 @@
+using System.Reflection;
 using ForlabsMcp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+
+var version = Assembly.GetExecutingAssembly()
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+    ?.Split('+')[0] // strip the +<git-sha> source-link suffix dotnet appends
+    ?? "0.0.0-dev";
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -26,7 +32,7 @@ builder.Services.AddSingleton(new DownloadOptions(downloadDir));
 builder.Services
     .AddMcpServer(o =>
     {
-        o.ServerInfo = new() { Name = "forlabs-mcp", Version = "1.0.0" };
+        o.ServerInfo = new() { Name = "forlabs-mcp", Version = version };
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly();

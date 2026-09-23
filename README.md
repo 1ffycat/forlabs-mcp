@@ -10,7 +10,11 @@ Built by reverse-engineering a HAR capture of the Angular frontend's `lm-vendor/
 dotnet build src/ForlabsMcp
 ```
 
-Requires the .NET 10 SDK (pinned in `global.json`, `rollForward: latestMinor` so any 10.x SDK works). Or skip installing a toolchain entirely and use the [Nix flake](#nix--nixos).
+Requires the .NET 10 SDK (pinned in `global.json`, `rollForward: latestMinor` so any 10.x SDK works). Or skip installing a toolchain entirely and grab a [prebuilt release](#prebuilt-releases) or use the [Nix flake](#nix--nixos).
+
+## Prebuilt releases
+
+Tagging a release (`vX.Y.Z`) triggers a GitHub Actions workflow that builds self-contained, single-file binaries — no .NET runtime needed — for `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and publishes them (with a `SHA256SUMS` file) to the repo's [Releases](../../releases) page. On NixOS, prefer the [flake](#nix--nixos) instead — it stays reproducible and lets you pin/update declaratively. Everywhere else, there's no auto-update: grab a new release manually when you want one.
 
 ## Configure
 

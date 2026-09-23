@@ -73,16 +73,22 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     }
 
     [McpServerTool(Name = "forlabs_get_upcoming_homework"),
-     Description("Scans every subject for the student's group and returns homework with a deadline in the next " +
-                  "N days that doesn't look completed yet — designed for a morning briefing / 'what's due soon' " +
-                  "digest. Tasks without a deadline are omitted (they're not time-boxed).")]
+     Description("Scans every subject for the student's group and returns homework with a deadline between " +
+                  "'overdue_grace_days' ago and N days from now that doesn't look completed yet — designed for " +
+                  "a morning briefing / 'what's due soon' digest. Tasks without a deadline are omitted (they're " +
+                  "not time-boxed), and tasks overdue by more than the grace window are excluded too: Forlabs' " +
+                  "'status' field isn't a reliable completion marker (old, long-over semesters routinely still " +
+                  "carry non-graded statuses), so without a lower bound this would surface years-old homework.")]
     public async Task<string> GetUpcomingHomework(
         [Description("How many days ahead to look. Default 7.")] int? days_ahead,
+        [Description("How many days into the past an already-overdue task still counts as relevant. Default 2.")] int? overdue_grace_days,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
         CancellationToken ct)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
-        var horizon = DateTimeOffset.UtcNow.AddDays(days_ahead ?? 7);
+        var now = DateTimeOffset.UtcNow;
+        var horizon = now.AddDays(days_ahead ?? 7);
+        var earliest = now.AddDays(-(overdue_grace_days ?? 2));
         var studies = await ctx.ListStudiesAsync(streamId, ct);
 
         var perSubject = await Task.WhenAll(studies.Select(async s =>
@@ -97,7 +103,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                     var deadline = DateTimeOffset.Parse(t.Str("pivot_end_at")!);
                     return (deadline, subject: s.Str("verbose_name"), studyId: studyId.Value, task: t);
                 })
-                .Where(x => x.deadline <= horizon)
+                .Where(x => x.deadline >= earliest && x.deadline <= horizon)
                 .ToArray();
         }));
 
