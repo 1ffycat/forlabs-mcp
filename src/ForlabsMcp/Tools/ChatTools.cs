@@ -44,10 +44,10 @@ public sealed class ChatTools(ForlabsApi api, ForlabsContext ctx)
         var comments = JsonUtil.ArrayOf(resp, "comments").Select(c => new
         {
             id = c.Int("id"),
-            author = c.Str("author_name") ?? c.Str("user_name"),
-            text = c.Str("text") ?? c.Str("content") ?? c.Str("message"),
+            author = (c["user"] as JsonObject).Str("name"),
+            text = c.Str("message"),
             created_at = c.Str("created_at"),
-            files = c["files"]?.AsArray().Select(f => new
+            files = c["attachments"]?.AsArray().Select(f => new
             {
                 filename = f?["filename"]?.ToString(),
                 url = f?["url"]?.ToString(),

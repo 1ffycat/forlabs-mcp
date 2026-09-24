@@ -24,4 +24,5 @@ public static class JsonUtil
 
     public static string? Str(this JsonObject? o, string key) => (string?)o?[key];
     public static int? Int(this JsonObject? o, string key) => (int?)o?[key];
+    public static double? Dbl(this JsonObject? o, string key) => (double?)o?[key];
 }
