@@ -145,7 +145,8 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - `forlabs_get_homework_details` — full task content + attachment URLs + linked `assignment_id`.
 - `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; see `forlabs_get_recent_activity` below for the "what did I already do" complement.
 - `forlabs_download_task_file` — downloads an attachment URL to local disk so a coding agent can open/use it directly.
-- `forlabs_get_course_materials` — chapter/material index for a subject.
+- `forlabs_get_course_materials` — course program (chapter/topic index) for a subject.
+- `forlabs_get_course_chapter` — one chapter's HTML content, attached files, blocks (HTML, video, test metadata) and the student's past test attempts.
 
 **Communication**
 - `forlabs_get_announcements` — per-subject posts/announcements.
@@ -159,7 +160,7 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 ## Limitations
 
 - **Read-only.** No homework submission, no chat replies, no test-taking — none of these appeared in the recorded HAR.
-- **Course material content** (`forlabs_get_course_materials`) only returns the chapter index (titles, `has_content`, block counts); the endpoint that returns a chapter's actual content blocks was never called during the capture, so it isn't implemented.
+- **Course tests.** `forlabs_get_course_chapter` reports per-block test metadata (question count, max tries) and the student's past attempts, but not the questions themselves — the test-taking endpoints weren't in the capture.
 - **Task status codes.** The task's own `pivot_status` field turned out to be unrelated to submission/grading state (a live capture showed a graded pass and a never-submitted overdue task sharing the same value), so it isn't used for `status`/`status_hint` anymore. Those are now derived from the `assignments` array returned alongside `tasks` by the same endpoint (matched by `task_id`): assignment `status` 1 = no response yet ("В очереди"/"Долг" depending on whether the deadline has passed), 2 = submitted and awaiting review, 3 = graded, 6 = response received but not numerically graded (e.g. absence-excuse tasks). Still not documented by Forlabs, but confirmed against a live account's task list, screenshot, and per-task detail responses.
 - **"Current semester" filtering** (`forlabs_get_upcoming_homework`, `forlabs_get_recent_activity`) is inferred from a study's `status` field (`2` = current, `3` = finished) observed on one live account; it isn't documented by Forlabs either, so it's a best-effort heuristic, not a guarantee — though a much more reliable one than trying to guess "current" from task deadlines (see below).
 - **Two-week schedule resolution.** Forlabs encodes its rotating schedule as a single `day` index 1-14 (1-7 and 8-14 = two alternating week variants). `sched/get_grid`'s `upperweek` field looks like it should say which half is "this week", but empirically it does not track that (verified live against a known-correct date/class list — see `ScheduleMath`'s doc comment); `forlabs_get_schedule_for_date`/`_for_week` instead anchor day-range 1-7 to the calendar week containing "today" as of the call and alternate by parity for other weeks. This matches everything checked against a live account so far, but the underlying rotation logic is still inferred, not documented.

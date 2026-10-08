@@ -12,3 +12,4 @@ result-*
 # Local env/secrets
 .env
 *.local.json
+.vscode

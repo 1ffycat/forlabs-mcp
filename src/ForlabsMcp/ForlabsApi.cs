@@ -42,6 +42,14 @@ public sealed class ForlabsApi(ForlabsClient client)
         client.PostJsonAsync(Repo + "learning/get_chapters",
             new { stream_id = streamId.ToString(), study_id = studyId.ToString() }, ct);
 
+    public Task<JsonNode?> GetChapterAsync(int streamId, int studyId, int chapterId, CancellationToken ct) =>
+        client.PostJsonAsync(Repo + "learning/get_chapter",
+            new { stream_id = streamId.ToString(), study_id = studyId.ToString(), chapter_id = chapterId.ToString() }, ct);
+
+    public Task<JsonNode?> GetBlocksAsync(int streamId, int studyId, int chapterId, CancellationToken ct) =>
+        client.PostJsonAsync(Repo + "learning/get_blocks",
+            new { stream_id = streamId.ToString(), study_id = studyId.ToString(), chapter_id = chapterId.ToString() }, ct);
+
     public Task<JsonNode?> GetExamsAsync(int streamId, int studyId, CancellationToken ct) =>
         client.PostJsonAsync(Repo + "learning/get_exams",
             new { stream_id = streamId.ToString(), study_id = studyId.ToString() }, ct);

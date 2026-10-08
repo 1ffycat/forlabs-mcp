@@ -134,10 +134,10 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     }
 
     [McpServerTool(Name = "forlabs_get_course_materials"),
-     Description("Lists the course chapters/materials structure for a subject (titles, whether they have " +
-                  "content, block counts). Note: this captures only the chapter index — the Forlabs API for " +
-                  "fetching a chapter's actual content blocks was not observed in the recorded traffic this " +
-                  "server was built from, so block contents are not retrievable here.")]
+     Description("Lists the course program (chapters/topics) for a subject: titles, whether they have " +
+                  "content, block counts. This is only the index — call forlabs_get_course_chapter with a " +
+                  "chapter id from here to read a topic's content, attached files and blocks. Also lists " +
+                  "course-wide attached files (`course_files`).")]
     public async Task<string> GetCourseMaterials(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
@@ -146,7 +146,79 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
         var resp = await api.GetChaptersAsync(streamId, studyId, ct);
-        return JsonUtil.Pretty(new { stream_id = streamId, study_id = studyId, subject = subjectName, result = resp });
+        var course = resp?["course"] as JsonObject;
+        return JsonUtil.Pretty(new
+        {
+            stream_id = streamId,
+            study_id = studyId,
+            subject = subjectName,
+            course_files = ShapeFiles(course?["files"]),
+            chapters = resp?["chapters"],
+            passed_counts = resp?["passed_counts"],
+        });
+    }
+
+    [McpServerTool(Name = "forlabs_get_course_chapter"),
+     Description("Reads one chapter (topic) of a subject's course program: annotation and content (HTML), " +
+                  "attached files (with direct URLs — fetch with forlabs_download_task_file), and the chapter's " +
+                  "blocks (title, HTML content, video link, whether it has a test, question count, max tries). " +
+                  "Also returns the student's past test attempts (`passings`) per block. Test questions " +
+                  "themselves are not exposed. Get chapter ids from forlabs_get_course_materials.")]
+    public async Task<string> GetCourseChapter(
+        [Description("Subject name (substring match) or numeric study_id.")] string subject,
+        [Description("Chapter id, as returned by forlabs_get_course_materials.")] int chapter_id,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
+        CancellationToken ct)
+    {
+        var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
+        var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
+        var chapterTask = api.GetChapterAsync(streamId, studyId, chapter_id, ct);
+        var blocksTask = api.GetBlocksAsync(streamId, studyId, chapter_id, ct);
+        await Task.WhenAll(chapterTask, blocksTask);
+        var chapter = chapterTask.Result?["chapter"] as JsonObject;
+        var blocks = blocksTask.Result;
+        var blockTitles = JsonUtil.ArrayOf(blocks, "blocks")
+            .Where(b => b.Int("id") is not null)
+            .ToDictionary(b => b.Int("id")!.Value, b => b.Str("title"));
+
+        return JsonUtil.Pretty(new
+        {
+            stream_id = streamId,
+            study_id = studyId,
+            subject = subjectName,
+            chapter = new
+            {
+                id = chapter.Int("id"),
+                title = chapter.Str("title"),
+                annotation = chapter.Str("annotation"),
+                content = chapter.Str("content"),
+                blocks_count = chapter.Int("blocks_count"),
+                files = ShapeFiles(chapter?["files"]),
+            },
+            blocks = JsonUtil.ArrayOf(blocks, "blocks").Select(b => new
+            {
+                id = b.Int("id"),
+                title = b.Str("title"),
+                content = b.Str("content"),
+                video_url = b.Str("video_url"),
+                has_test = (bool?)b["has_test"],
+                questions_count = b.Int("items_count"),
+                max_tries = b.Int("max_tries"),
+            }),
+            passings = JsonUtil.ArrayOf(blocks, "passings").Select(p => new
+            {
+                block_id = p.Int("block_id"),
+                block_title = blockTitles.GetValueOrDefault(p.Int("block_id") ?? -1),
+                status = p.Int("status"),
+                begin_time = p.Str("begin_time"),
+                end_time = p.Str("end_time"),
+                points = p.Dbl("points"),
+                credits = p.Dbl("credits"),
+                tries_count = p.Int("tries_count"),
+                missed_count = p.Int("missed_count"),
+            }),
+            passed_count = blocks?["passed_count"],
+        });
     }
 
     /// <summary>
@@ -177,14 +249,17 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
         opens_at = t.Str("pivot_start_at"),
         description = t.Str("pivot_description"),
         chapter = t.Str("chapter_title"),
-        files = t["files"]?.AsArray().Select(f => new
+        files = ShapeFiles(t["files"]),
+    };
+
+    private static IEnumerable<object>? ShapeFiles(JsonNode? files) =>
+        files?.AsArray().Select(f => (object)new
         {
             filename = f?["filename"]?.ToString(),
             url = f?["url"]?.ToString(),
             size = f?["human_size"]?.ToString(),
             mime_type = f?["mime_type"]?.ToString(),
-        }),
-    };
+        });
 
     /// <summary>
     /// Derived from the assignment's `status` field (see AssignmentsByTaskId), cross-checked against a
