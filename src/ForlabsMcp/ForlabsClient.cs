@@ -70,8 +70,9 @@ public sealed class ForlabsClient : IDisposable
         using (var getReq = new HttpRequestMessage(HttpMethod.Get, "app/login"))
         {
             getReq.Headers.Referrer = _baseUri;
-            using var getResp = await _http.SendAsync(getReq, ct);
-            getResp.EnsureSuccessStatusCode();
+            using var getResp = await SendAsync(getReq, ct);
+            if (!getResp.IsSuccessStatusCode)
+                throw new McpException($"Forlabs login page returned {(int)getResp.StatusCode} {getResp.StatusCode}");
         }
 
         var xsrf = XsrfHeaderValue()
@@ -95,7 +96,7 @@ public sealed class ForlabsClient : IDisposable
         postReq.Headers.Referrer = new Uri(_baseUri, "app/login");
         postReq.Headers.Add("Origin", _baseUri.GetLeftPart(UriPartial.Authority));
 
-        using var postResp = await _http.SendAsync(postReq, ct);
+        using var postResp = await SendAsync(postReq, ct);
         var body = await postResp.Content.ReadAsStringAsync(ct);
 
         if (!postResp.IsSuccessStatusCode)
@@ -130,7 +131,7 @@ public sealed class ForlabsClient : IDisposable
         }
 
         if (string.IsNullOrWhiteSpace(result.body)) return null;
-        return JsonNode.Parse(result.body);
+        return ParseJson(relativePath, result.body);
     }
 
     private async Task<(HttpStatusCode status, string body)> SendJsonAsync(
@@ -145,9 +146,36 @@ public sealed class ForlabsClient : IDisposable
         var json = body is null ? "" : JsonSerializer.Serialize(body);
         req.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        using var resp = await _http.SendAsync(req, ct);
+        using var resp = await SendAsync(req, ct);
         var text = await resp.Content.ReadAsStringAsync(ct);
         return (resp.StatusCode, text);
+    }
+
+    // The MCP SDK hides the message of any exception that isn't an McpException, so network
+    // failures, timeouts and malformed responses are rethrown as one to reach the agent.
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage req, CancellationToken ct,
+        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead)
+    {
+        try { return await _http.SendAsync(req, completion, ct); }
+        catch (HttpRequestException ex)
+        {
+            throw new McpException($"Forlabs request {req.Method} {req.RequestUri} failed: {ex.Message}", ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new McpException($"Forlabs request {req.Method} {req.RequestUri} timed out: {ex.Message}", ex);
+        }
+    }
+
+    private static JsonNode? ParseJson(string path, string body)
+    {
+        try { return JsonNode.Parse(body); }
+        catch (JsonException ex)
+        {
+            var head = body.Length > 300 ? body[..300] : body;
+            throw new McpException($"Forlabs API {path} returned invalid JSON ({ex.Message}): {head}", ex);
+        }
     }
 
     /// <summary>GET a JSON endpoint under the app (e.g. "app/profile/user").</summary>
@@ -167,14 +195,14 @@ public sealed class ForlabsClient : IDisposable
             throw new McpException($"Forlabs API {relativePath} returned {(int)status} {status}: {body}");
         }
 
-        return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
+        return string.IsNullOrWhiteSpace(body) ? null : ParseJson(relativePath, body);
     }
 
     private async Task<(HttpStatusCode status, string body)> SendGetAsync(string relativePath, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, relativePath);
         req.Headers.Referrer = _baseUri;
-        using var resp = await _http.SendAsync(req, ct);
+        using var resp = await SendAsync(req, ct);
         var text = await resp.Content.ReadAsStringAsync(ct);
         return (resp.StatusCode, text);
     }
@@ -184,8 +212,9 @@ public sealed class ForlabsClient : IDisposable
         string url, string destinationPath, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
+        using var resp = await SendAsync(req, ct, HttpCompletionOption.ResponseHeadersRead);
+        if (!resp.IsSuccessStatusCode)
+            throw new McpException($"Download of {url} failed: {(int)resp.StatusCode} {resp.StatusCode}");
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationPath))!);
         await using (var fs = new FileStream(destinationPath, FileMode.Create, FileAccess.Write))
