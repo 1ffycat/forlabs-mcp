@@ -1,3 +1,4 @@
+using ModelContextProtocol;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using ModelContextProtocol.Server;
@@ -172,11 +173,17 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
-        var chapterTask = api.GetChapterAsync(streamId, studyId, chapter_id, ct);
-        var blocksTask = api.GetBlocksAsync(streamId, studyId, chapter_id, ct);
-        await Task.WhenAll(chapterTask, blocksTask);
-        var chapter = chapterTask.Result?["chapter"] as JsonObject;
-        var blocks = blocksTask.Result;
+        var chapter = (await api.GetChapterAsync(streamId, studyId, chapter_id, ct))?["chapter"] as JsonObject;
+
+        // get_blocks answers 500 for chapters without blocks (blocks_count = 0), so skip it there
+        // and don't let a failure take the chapter content down with it.
+        JsonNode? blocks = null;
+        string? blocksError = null;
+        if (chapter.Int("blocks_count") is not 0)
+        {
+            try { blocks = await api.GetBlocksAsync(streamId, studyId, chapter_id, ct); }
+            catch (McpException ex) { blocksError = ex.Message; }
+        }
         var blockTitles = JsonUtil.ArrayOf(blocks, "blocks")
             .Where(b => b.Int("id") is not null)
             .ToDictionary(b => b.Int("id")!.Value, b => b.Str("title"));
@@ -218,6 +225,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                 missed_count = p.Int("missed_count"),
             }),
             passed_count = blocks?["passed_count"],
+            blocks_error = blocksError,
         });
     }
 
