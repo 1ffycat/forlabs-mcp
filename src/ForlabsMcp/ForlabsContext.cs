@@ -1,3 +1,4 @@
+using ModelContextProtocol;
 using System.Text.Json.Nodes;
 
 namespace ForlabsMcp;
@@ -39,7 +40,7 @@ public sealed class ForlabsContext(ForlabsApi api)
                 return sid;
             }
 
-            throw new InvalidOperationException(
+            throw new McpException(
                 "Could not determine the student's own stream_id from /app/profile/user or get_streams. " +
                 "Pass stream_id explicitly.");
         }
@@ -122,12 +123,12 @@ public sealed class ForlabsContext(ForlabsApi api)
         if (contains.Count == 0)
         {
             var names = string.Join(", ", all.Select(s => s["verbose_name"]?.GetValue<string>()));
-            throw new InvalidOperationException(
+            throw new McpException(
                 $"No subject matching \"{subject}\" was found for stream {streamId}. Available subjects: {names}");
         }
 
         var options = string.Join(", ", contains.Select(s => $"{s["verbose_name"]?.GetValue<string>()} (id={s["id"]})"));
-        throw new InvalidOperationException(
+        throw new McpException(
             $"\"{subject}\" matches more than one subject: {options}. Pass the numeric id or a more specific name.");
     }
 }

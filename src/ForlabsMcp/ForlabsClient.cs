@@ -1,3 +1,4 @@
+using ModelContextProtocol;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -74,7 +75,7 @@ public sealed class ForlabsClient : IDisposable
         }
 
         var xsrf = XsrfHeaderValue()
-            ?? throw new InvalidOperationException("Forlabs login: no XSRF-TOKEN cookie returned by the server.");
+            ?? throw new McpException("Forlabs login: no XSRF-TOKEN cookie returned by the server.");
 
         // Step 2: POST credentials as JSON, echoing the XSRF token back as a header
         // (Laravel Sanctum "stateful" CSRF protection) plus Origin/Referer, which
@@ -99,7 +100,7 @@ public sealed class ForlabsClient : IDisposable
 
         if (!postResp.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
+            throw new McpException(
                 $"Forlabs login failed ({(int)postResp.StatusCode} {postResp.StatusCode}): {body}");
         }
     }
@@ -124,7 +125,7 @@ public sealed class ForlabsClient : IDisposable
 
         if ((int)result.status >= 400)
         {
-            throw new InvalidOperationException(
+            throw new McpException(
                 $"Forlabs API {relativePath} returned {(int)result.status} {result.status}: {result.body}");
         }
 
@@ -163,7 +164,7 @@ public sealed class ForlabsClient : IDisposable
 
         if ((int)status >= 400)
         {
-            throw new InvalidOperationException($"Forlabs API {relativePath} returned {(int)status} {status}: {body}");
+            throw new McpException($"Forlabs API {relativePath} returned {(int)status} {status}: {body}");
         }
 
         return string.IsNullOrWhiteSpace(body) ? null : JsonNode.Parse(body);
