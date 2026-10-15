@@ -11,8 +11,8 @@ public sealed class ChatTools(ForlabsApi api, ForlabsContext ctx)
      Description("Lists announcements/posts for a subject (e.g. exam procedure notices, schedule changes).")]
     public async Task<string> GetAnnouncements(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -38,7 +38,7 @@ public sealed class ChatTools(ForlabsApi api, ForlabsContext ctx)
         [Description("The study_id the task belongs to.")] int study_id,
         [Description("The task id.")] int task_id,
         [Description("The assignment id, from forlabs_get_homework_details' 'assignment.assignment_id' field.")] int assignment_id,
-        CancellationToken ct)
+        CancellationToken ct = default)
     {
         var resp = await api.GetCommentsAsync(study_id, task_id, assignment_id, ct);
         var comments = JsonUtil.ArrayOf(resp, "comments").Select(c => new

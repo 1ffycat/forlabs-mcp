@@ -12,8 +12,8 @@ public sealed class FileTools(ForlabsClient client, DownloadOptions downloadOpti
                   "'url' from forlabs_get_homework_details / forlabs_get_task_chat's file entries.")]
     public async Task<string> DownloadTaskFile(
         [Description("The direct file URL, as returned in a task/comment's 'files[].url' field.")] string url,
-        [Description("Optional filename to save as. Defaults to the name in the URL.")] string? filename,
-        CancellationToken ct)
+        [Description("Optional filename to save as. Defaults to the name in the URL.")] string? filename = null,
+        CancellationToken ct = default)
     {
         var name = filename ?? Path.GetFileName(new Uri(url).LocalPath);
         if (string.IsNullOrWhiteSpace(name)) name = "download.bin";

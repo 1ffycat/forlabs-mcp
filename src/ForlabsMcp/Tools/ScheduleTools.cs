@@ -26,9 +26,9 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
      Description("Returns the class schedule for one specific calendar date (defaults to today), resolved " +
                   "from Forlabs' two-week rotating grid. Use this for 'what do I have today/tomorrow' briefings.")]
     public async Task<string> GetScheduleForDate(
-        [Description("Date as YYYY-MM-DD. Omit for today.")] string? date,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Date as YYYY-MM-DD. Omit for today.")] string? date = null,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var target = date is null ? TodayLocal() : DateOnly.Parse(date);
@@ -58,9 +58,9 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
      Description("Returns the class schedule for a 7-day span starting at the given date (defaults to the " +
                   "Monday of the current week). Use this for weekly planning briefings.")]
     public async Task<string> GetScheduleForWeek(
-        [Description("Any date within the target week, as YYYY-MM-DD. Omit for the current week.")] string? date,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Any date within the target week, as YYYY-MM-DD. Omit for the current week.")] string? date = null,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var anchor = date is null ? TodayLocal() : DateOnly.Parse(date);
@@ -98,8 +98,8 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
                   "forlabs_get_schedule_for_date / forlabs_get_schedule_for_week for normal use; use this only " +
                   "when you need the complete unresolved rotation.")]
     public async Task<string> GetRawTwoWeekSchedule(
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (grid, schedule) = await FetchGridAndSchedule(streamId, ct);

@@ -14,9 +14,9 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                   "don't know the subject's study_id.")]
     public async Task<string> GetHomework(
         [Description("Subject name (substring match, e.g. 'Философия') or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        [Description("Include tasks that already look graded/completed. Default false.")] bool? include_completed,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        [Description("Include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -46,8 +46,8 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     public async Task<string> GetHomeworkDetails(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
         [Description("The task id, as returned by forlabs_get_homework.")] int task_id,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -84,10 +84,10 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                   "are omitted (they're not time-boxed). Pass include_completed=true for a 'what have I already " +
                   "turned in' view instead of (or in addition to) 'what's still pending'.")]
     public async Task<string> GetUpcomingHomework(
-        [Description("How many days ahead to look. Default 7.")] int? days_ahead,
-        [Description("Also include tasks that already look graded/completed. Default false.")] bool? include_completed,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("How many days ahead to look. Default 7.")] int? days_ahead = null,
+        [Description("Also include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var horizon = DateTimeOffset.UtcNow.AddDays(days_ahead ?? 7);
@@ -141,8 +141,8 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                   "course-wide attached files (`course_files`).")]
     public async Task<string> GetCourseMaterials(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -168,8 +168,8 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     public async Task<string> GetCourseChapter(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
         [Description("Chapter id, as returned by forlabs_get_course_materials.")] int chapter_id,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);

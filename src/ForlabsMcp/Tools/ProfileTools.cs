@@ -19,8 +19,8 @@ public sealed class ProfileTools(ForlabsApi api, ForlabsContext ctx)
                   "(needed by other tools), lecturers, and credit/ЗЕТ info. Call this first to discover " +
                   "which subject names/IDs are available before asking about homework, posts, exams, etc.")]
     public async Task<string> ListSubjects(
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var studies = await ctx.ListStudiesAsync(streamId, ct);

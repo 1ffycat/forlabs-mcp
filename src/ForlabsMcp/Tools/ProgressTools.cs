@@ -10,8 +10,8 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
      Description("Returns the credits/grade summary for every subject in the group (the 'зачётка' overview): " +
                   "accumulated credits (rating points) and grade per study_id.")]
     public async Task<string> GetScoresSummary(
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var studies = await ctx.ListStudiesAsync(streamId, ct);
@@ -38,8 +38,8 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
                   "points awarded, grading teacher, and the cause/reason text).")]
     public async Task<string> GetScoringLog(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -52,8 +52,8 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
                   "student was marked present.")]
     public async Task<string> GetAttendance(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
@@ -67,9 +67,9 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
                   "complement to forlabs_get_upcoming_homework: 'what did I get graded on recently' rather " +
                   "than 'what's still due'. Useful for a 'what did I do today/this week' recap.")]
     public async Task<string> GetRecentActivity(
-        [Description("How many days back to look. Default 7.")] int? days_back,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("How many days back to look. Default 7.")] int? days_back = null,
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var earliest = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-(days_back ?? 7));
@@ -112,8 +112,8 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
                   "passing result (grade, points, percentage, credits earned).")]
     public async Task<string> GetExams(
         [Description("Subject name (substring match) or numeric study_id.")] string subject,
-        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id,
-        CancellationToken ct)
+        [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
