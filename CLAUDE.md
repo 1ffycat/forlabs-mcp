@@ -31,4 +31,5 @@ Adding a tool: endpoint wrapper in `ForlabsApi` → tool method in the relevant 
 - Nix: changing a `PackageReference` requires regenerating `nix/deps.json` (see README).
 - Releases: tag `vX.Y.Z` → GitHub Actions builds raw single-file binaries (standalone + runtime-dependent) for 5 platforms.
 - README is partly in English; user-facing Forlabs strings are Russian — don't translate them.
+- `.claude/skills/forlabs` (how to use the tools, pitfalls) and `.claude/agents/forlabs-course-researcher.md` ship with the repo; update them when tool names or parameters change. Copy them to `~/.claude/` to use from other projects.
 - Every optional tool parameter must have `= null` (and `CancellationToken ct = default`): MCP clients omit unset args, and the SDK throws "missing a value for the required parameter" otherwise (client sees only a generic "An error occurred invoking"). Debug by running the exe over stdio and reading stderr.

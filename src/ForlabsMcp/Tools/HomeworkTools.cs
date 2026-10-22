@@ -11,11 +11,13 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     [McpServerTool(Name = "forlabs_get_homework"),
      Description("Lists homework/tasks for one subject: id, title, content (HTML), attached files, max points " +
                   "(pivot_cost), deadline (pivot_end_at) and status. Call forlabs_list_subjects first if you " +
-                  "don't know the subject's study_id.")]
+                  "don't know the subject's study_id. Content is truncated to 200 characters unless " +
+                  "include_content=true (or use forlabs_get_homework_details for one task).")]
     public async Task<string> GetHomework(
         [Description("Subject name (substring match, e.g. 'Философия') or numeric study_id.")] string subject,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
         [Description("Include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
+        [Description("Return the full task text instead of the first 200 characters. Default false.")] bool? include_content = null,
         CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
@@ -25,7 +27,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
 
         var tasks = JsonUtil.ArrayOf(resp, "tasks")
             .Where(t => include_completed == true || !IsCompleted(assignments.GetValueOrDefault(t.Int("id") ?? -1)))
-            .Select(t => ShapeTask(t, assignments.GetValueOrDefault(t.Int("id") ?? -1)))
+            .Select(t => ShapeTask(t, assignments.GetValueOrDefault(t.Int("id") ?? -1), include_content == true))
             .ToList();
 
         return JsonUtil.Pretty(new
@@ -81,27 +83,30 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                   "field), so it won't resurface homework from finished semesters even if Forlabs never marked " +
                   "it graded; within the current semester, already-overdue-but-still-pending tasks are included " +
                   "with no cutoff, since those are exactly the ones worth surfacing. Tasks without a deadline " +
-                  "are omitted (they're not time-boxed). Pass include_completed=true for a 'what have I already " +
+                  "are omitted unless include_no_deadline=true (then listed separately in `no_deadline`). Pass include_completed=true for a 'what have I already " +
                   "turned in' view instead of (or in addition to) 'what's still pending'.")]
     public async Task<string> GetUpcomingHomework(
         [Description("How many days ahead to look. Default 7.")] int? days_ahead = null,
         [Description("Also include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
+        [Description("Also return pending tasks without a deadline in a separate `no_deadline` array (not limited by days_ahead). Default false.")] bool? include_no_deadline = null,
         CancellationToken ct = default)
     {
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var horizon = DateTimeOffset.UtcNow.AddDays(days_ahead ?? 7);
         var studies = await ctx.ListCurrentStudiesAsync(streamId, ct);
 
-        var perSubject = await Task.WhenAll(studies.Select(async s =>
+        var fetched = await Task.WhenAll(studies.Select(async s =>
         {
             var studyId = s.Int("id");
-            if (studyId is null) return [];
+            if (studyId is null) return (dated: [], undated: new List<object>());
             var resp = await api.GetTasksAsync(streamId, studyId.Value, ct);
             var assignments = AssignmentsByTaskId(resp);
-            return JsonUtil.ArrayOf(resp, "tasks")
-                .Where(t => (include_completed == true || !IsCompleted(assignments.GetValueOrDefault(t.Int("id") ?? -1)))
-                            && t["pivot_end_at"] is not null)
+            var pending = JsonUtil.ArrayOf(resp, "tasks")
+                .Where(t => include_completed == true || !IsCompleted(assignments.GetValueOrDefault(t.Int("id") ?? -1)))
+                .ToList();
+            var dated = pending
+                .Where(t => t["pivot_end_at"] is not null)
                 .Select(t =>
                 {
                     var deadline = DateTimeOffset.Parse(t.Str("pivot_end_at")!);
@@ -110,7 +115,19 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                 })
                 .Where(x => x.deadline <= horizon)
                 .ToArray();
+            var undated = include_no_deadline == true
+                ? pending.Where(t => t["pivot_end_at"] is null)
+                    .Select(t => (object)new
+                    {
+                        subject = s.Str("verbose_name"),
+                        study_id = studyId.Value,
+                        task = ShapeTask(t, assignments.GetValueOrDefault(t.Int("id") ?? -1), includeContent: false),
+                    }).ToList()
+                : new List<object>();
+            return (dated, undated);
         }));
+        var perSubject = fetched.Select(f => f.dated);
+        var noDeadline = fetched.SelectMany(f => f.undated).ToList();
 
         var due = perSubject.SelectMany(x => x)
             .OrderBy(x => x.deadline)
@@ -131,6 +148,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
             horizon_days = days_ahead ?? 7,
             due_count = due.Count,
             due,
+            no_deadline = include_no_deadline == true ? noDeadline : null,
         });
     }
 
@@ -234,7 +252,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
     /// state (see StatusHint) keyed by task_id; `pivot_status` on each task is unrelated to it (observed
     /// both "graded pass" and "never submitted, overdue" tasks sharing the same pivot_status).
     /// </summary>
-    private static Dictionary<int, JsonObject> AssignmentsByTaskId(JsonNode? resp) =>
+    internal static Dictionary<int, JsonObject> AssignmentsByTaskId(JsonNode? resp) =>
         JsonUtil.ArrayOf(resp, "assignments")
             .Where(a => a.Int("task_id") is not null)
             .ToDictionary(a => a.Int("task_id")!.Value, a => a);

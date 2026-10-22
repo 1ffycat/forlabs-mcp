@@ -12,6 +12,7 @@ public sealed class ForlabsContext(ForlabsApi api)
 {
     private readonly SemaphoreSlim _lock = new(1, 1);
     private int? _ownStreamId;
+    private int? _ownUserId;
     private readonly Dictionary<int, (DateTime fetchedAt, List<JsonObject> studies)> _studiesCache = new();
 
     public async Task<int> ResolveOwnStreamIdAsync(CancellationToken ct)
@@ -48,6 +49,15 @@ public sealed class ForlabsContext(ForlabsApi api)
         {
             _lock.Release();
         }
+    }
+
+    /// <summary>The logged-in user's id (root `id` of /app/profile/user), cached; used to tell own comments from the teacher's.</summary>
+    public async Task<int?> ResolveOwnUserIdAsync(CancellationToken ct)
+    {
+        if (_ownUserId is int cached) return cached;
+        var profile = await api.GetProfileAsync(ct);
+        _ownUserId = (profile as JsonObject).Int("id");
+        return _ownUserId;
     }
 
     public async Task<List<JsonObject>> ListStudiesAsync(int streamId, CancellationToken ct)
@@ -122,9 +132,10 @@ public sealed class ForlabsContext(ForlabsApi api)
 
         if (contains.Count == 0)
         {
-            var names = string.Join(", ", all.Select(s => s["verbose_name"]?.GetValue<string>()));
+            var current = all.Where(s => s.Int("status") == 2).ToList();
+            var names = string.Join(", ", (current.Count > 0 ? current : all).Select(s => $"{s["verbose_name"]?.GetValue<string>()} (id={s["id"]})"));
             throw new McpException(
-                $"No subject matching \"{subject}\" was found for stream {streamId}. Available subjects: {names}");
+                $"No subject matching \"{subject}\" was found for stream {streamId}. Available {(current.Count > 0 ? "current-semester " : "")}subjects: {names}");
         }
 
         var options = string.Join(", ", contains.Select(s => $"{s["verbose_name"]?.GetValue<string>()} (id={s["id"]})"));

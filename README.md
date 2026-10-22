@@ -141,16 +141,16 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - `forlabs_get_raw_two_week_schedule` — the raw, unresolved rotating 2-week grid.
 
 **Homework**
-- `forlabs_get_homework` — task list for a subject (title, points, deadline, status). `include_completed` toggles between "what's pending" and "what's already turned in".
+- `forlabs_get_homework` — task list for a subject (title, points, deadline, status). `include_completed` toggles between "what's pending" and "what's already turned in"; `include_content` returns the full task text instead of the 200-char preview.
 - `forlabs_get_homework_details` — full task content + attachment URLs + linked `assignment_id`.
-- `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; see `forlabs_get_recent_activity` below for the "what did I already do" complement.
+- `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; `include_no_deadline` adds a separate `no_deadline` array with pending tasks that have no deadline; see `forlabs_get_recent_activity` below for the "what did I already do" complement.
 - `forlabs_download_task_file` — downloads an attachment URL to local disk so a coding agent can open/use it directly.
 - `forlabs_get_course_materials` — course program (chapter/topic index) for a subject.
 - `forlabs_get_course_chapter` — one chapter's HTML content, attached files, blocks (HTML, video, test metadata) and the student's past test attempts.
 
 **Communication**
 - `forlabs_get_announcements` — per-subject posts/announcements.
-- `forlabs_get_task_chat` — per-assignment chat thread with the teacher (read-only).
+- `forlabs_get_task_chat` — per-assignment chat thread with the teacher (read-only). Takes `subject` + `task_id` (`assignment_id` is resolved automatically); comments are sorted oldest first and carry `author_id` and `is_own` (written by the logged-in student).
 
 **Progress**
 - `forlabs_get_scores_summary` — credits/grade overview across all subjects.
@@ -164,4 +164,6 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - **Task status codes.** The task's own `pivot_status` field turned out to be unrelated to submission/grading state (a live capture showed a graded pass and a never-submitted overdue task sharing the same value), so it isn't used for `status`/`status_hint` anymore. Those are now derived from the `assignments` array returned alongside `tasks` by the same endpoint (matched by `task_id`): assignment `status` 1 = no response yet ("В очереди"/"Долг" depending on whether the deadline has passed), 2 = submitted and awaiting review, 3 = graded, 6 = response received but not numerically graded (e.g. absence-excuse tasks). Still not documented by Forlabs, but confirmed against a live account's task list, screenshot, and per-task detail responses.
 - **"Current semester" filtering** (`forlabs_get_upcoming_homework`, `forlabs_get_recent_activity`) is inferred from a study's `status` field (`2` = current, `3` = finished) observed on one live account; it isn't documented by Forlabs either, so it's a best-effort heuristic, not a guarantee — though a much more reliable one than trying to guess "current" from task deadlines (see below).
 - **Two-week schedule resolution.** Forlabs encodes its rotating schedule as a single `day` index 1-14 (1-7 and 8-14 = two alternating week variants). `sched/get_grid`'s `upperweek` field looks like it should say which half is "this week", but empirically it does not track that (verified live against a known-correct date/class list — see `ScheduleMath`'s doc comment); `forlabs_get_schedule_for_date`/`_for_week` instead anchor day-range 1-7 to the calendar week containing "today" as of the call and alternate by parity for other weeks. This matches everything checked against a live account so far, but the underlying rotation logic is still inferred, not documented.
+- **Tasks without a deadline** are skipped by `forlabs_get_upcoming_homework` unless `include_no_deadline=true`. Deadlines are returned in UTC. Task `content` in `forlabs_get_homework` is truncated; use `forlabs_get_homework_details` for the full text.
+- **Teacher feedback** lives in `forlabs_get_task_chat` (`subject` + `task_id`). Assignment status 6 with 0 points and no `graded_at` often means the teacher replied or returned the task, but it is inferred, not documented: read the chat. `forlabs_get_upcoming_homework` treats status 6 as completed, so such tasks are hidden from it by default.
 - File attachment URLs point at a separate CDN (`matecdn.ru`) that appeared to require no auth in the capture.
