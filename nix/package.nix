@@ -6,7 +6,7 @@
 
 buildDotnetModule (finalAttrs: {
   pname = "forlabs-mcp";
-  version = "1.4.1";
+  version = "1.5.0";
 
   src = lib.cleanSourceWith {
     src = ../.;

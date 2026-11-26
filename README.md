@@ -141,9 +141,9 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 - `forlabs_get_raw_two_week_schedule` — the raw, unresolved rotating 2-week grid.
 
 **Homework**
-- `forlabs_get_homework` — task list for a subject (title, points, deadline, status). `include_completed` toggles between "what's pending" and "what's already turned in"; `include_content` returns the full task text instead of the 200-char preview.
+- `forlabs_get_homework` — task list for a subject (title, points, deadline, status). `include_completed` toggles between "what's pending" and "what's already turned in"; `include_content` returns the full task text instead of the 200-char preview. Optional `query` searches titles, chapter names and descriptions; `has_due`, `due_from` and `due_to` filter UTC deadline dates (inclusive). `limit` and `offset` page the filtered list; `total_count` reports all matches and `has_more` indicates another page.
 - `forlabs_get_homework_details` — full task content + attachment URLs + linked `assignment_id`.
-- `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; `include_no_deadline` adds a separate `no_deadline` array with pending tasks that have no deadline; see `forlabs_get_recent_activity` below for the "what did I already do" complement.
+- `forlabs_get_upcoming_homework` — scans every **current-semester** subject for deadlines in the next N days. This is the one to use for a "what's due soon" agent briefing; `include_no_deadline` adds a separate `no_deadline` array with pending tasks that have no deadline; see `forlabs_get_recent_activity` below for the "what did I already do" complement. The response includes `is_partial`, `warnings` and `failed_subjects`; if `is_partial` is true, disclose that the digest omits subjects listed as failed.
 - `forlabs_download_task_file` — downloads an attachment URL to local disk so a coding agent can open/use it directly.
 - `forlabs_get_course_materials` — course program (chapter/topic index) for a subject.
 - `forlabs_get_course_chapter` — one chapter's HTML content, attached files, blocks (HTML, video, test metadata) and the student's past test attempts.
@@ -154,7 +154,7 @@ Login and CSRF/session handling is automatic and transparent (lazy on first call
 
 **Progress**
 - `forlabs_get_scores_summary` — credits/grade overview across all subjects.
-- `forlabs_get_recent_activity` — scans every current-semester subject's grading log for entries from the last N days. The "what did I do [recently]" counterpart to `forlabs_get_upcoming_homework`'s "what's due".
+- `forlabs_get_recent_activity` — scans every current-semester subject's grading log for entries from the last N days. The "what did I do [recently]" counterpart to `forlabs_get_upcoming_homework`'s "what's due". Like the upcoming-homework digest, it returns `is_partial`, `warnings` and `failed_subjects`; disclose incomplete results when `is_partial` is true.
 - `forlabs_get_scoring_log`, `forlabs_get_attendance`, `forlabs_get_exams` — per-subject detail.
 
 ## Limitations

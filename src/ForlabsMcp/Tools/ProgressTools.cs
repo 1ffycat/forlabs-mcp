@@ -65,7 +65,8 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
      Description("Scans every subject in the student's *current* semester and returns grading events " +
                   "(assessment log entries — points awarded, by whom, for what) from the last N days — the " +
                   "complement to forlabs_get_upcoming_homework: 'what did I get graded on recently' rather " +
-                  "than 'what's still due'. Useful for a 'what did I do today/this week' recap.")]
+                  "than 'what's still due'. Useful for a 'what did I do today/this week' recap. The response " +
+                  "always includes is_partial, warnings and failed_subjects; disclose incomplete results.")]
     public async Task<string> GetRecentActivity(
         [Description("How many days back to look. Default 7.")] int? days_back = null,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
@@ -75,26 +76,26 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
         var earliest = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-(days_back ?? 7));
         var studies = await ctx.ListCurrentStudiesAsync(streamId, ct);
 
-        var perSubject = await Task.WhenAll(studies.Select(async s =>
+        var fetched = await StudyFetch.AllAsync(studies, async (studyId, token) =>
         {
-            var studyId = s.Int("id");
-            if (studyId is null) return [];
-            var resp = await api.GetScoringAsync(streamId, studyId.Value, ct);
+            var resp = await api.GetScoringAsync(streamId, studyId, token);
             return JsonUtil.ArrayOf(resp, "assessments")
                 .Where(a => a.Str("date") is not null && DateOnly.Parse(a.Str("date")!) >= earliest)
-                .Select(a => new
-                {
-                    subject = s.Str("verbose_name"),
-                    study_id = studyId.Value,
-                    date = a.Str("date"),
-                    credits = a["credits"]?.ToString(),
-                    lecturer = a.Str("lecturer_name"),
-                    cause = a.Str("cause"),
-                })
+                .Select(a => new ActivityEntry(
+                    a.Str("date"), a["credits"]?.ToString(), a.Str("lecturer_name"), a.Str("cause")))
                 .ToArray();
-        }));
+        }, ct);
 
-        var activity = perSubject.SelectMany(x => x)
+        var activity = fetched.Where(result => result.Value is not null)
+            .SelectMany(result => result.Value!.Select(item => new
+            {
+                subject = result.Subject,
+                study_id = result.StudyId,
+                date = item.Date,
+                credits = item.Credits,
+                lecturer = item.Lecturer,
+                cause = item.Cause,
+            }))
             .OrderByDescending(x => x.date)
             .ToList();
 
@@ -102,6 +103,14 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
         {
             stream_id = streamId,
             since = earliest.ToString("yyyy-MM-dd"),
+            is_partial = fetched.Any(result => result.Error is not null),
+            warnings = StudyFetch.Warnings(fetched),
+            failed_subjects = fetched.Where(result => result.Error is not null).Select(result => new
+            {
+                study_id = result.StudyId,
+                subject = result.Subject,
+                error = result.Error,
+            }),
             entry_count = activity.Count,
             activity,
         });
@@ -120,4 +129,5 @@ public sealed class ProgressTools(ForlabsApi api, ForlabsContext ctx)
         var resp = await api.GetExamsAsync(streamId, studyId, ct);
         return JsonUtil.Pretty(new { stream_id = streamId, study_id = studyId, subject = subjectName, result = resp });
     }
+    private sealed record ActivityEntry(string? Date, string? Credits, string? Lecturer, string? Cause);
 }

@@ -12,21 +12,43 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
      Description("Lists homework/tasks for one subject: id, title, content (HTML), attached files, max points " +
                   "(pivot_cost), deadline (pivot_end_at) and status. Call forlabs_list_subjects first if you " +
                   "don't know the subject's study_id. Content is truncated to 200 characters unless " +
-                  "include_content=true (or use forlabs_get_homework_details for one task).")]
+                  "include_content=true (or use forlabs_get_homework_details for one task). Optional filters " +
+                  "search task titles, chapter names and descriptions; has_due and due_from/due_to filter " +
+                  "UTC deadline dates inclusively. Results include total_count; use limit and offset to page.")]
     public async Task<string> GetHomework(
         [Description("Subject name (substring match, e.g. 'Философия') or numeric study_id.")] string subject,
         [Description("Academic group (stream) id. Omit to use the logged-in student's own group.")] int? stream_id = null,
         [Description("Include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
         [Description("Return the full task text instead of the first 200 characters. Default false.")] bool? include_content = null,
+        [Description("Case-insensitive substring search in task title, chapter and description.")] string? query = null,
+        [Description("Filter by deadline presence: true for dated tasks, false for tasks without a deadline.")] bool? has_due = null,
+        [Description("Inclusive UTC deadline start date in YYYY-MM-DD format.")] string? due_from = null,
+        [Description("Inclusive UTC deadline end date in YYYY-MM-DD format.")] string? due_to = null,
+        [Description("Maximum tasks to return. Omit for all matches.")] int? limit = null,
+        [Description("Number of matching tasks to skip; defaults to 0.")] int offset = 0,
         CancellationToken ct = default)
     {
+        HomeworkFilter filter;
+        try
+        {
+            filter = HomeworkFilter.Create(query, has_due, due_from, due_to, limit, offset);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new McpException($"Invalid homework filter: {ex.Message}", ex);
+        }
+
         var streamId = stream_id ?? await ctx.ResolveOwnStreamIdAsync(ct);
         var (studyId, subjectName) = await ctx.ResolveStudyAsync(streamId, subject, ct);
         var resp = await api.GetTasksAsync(streamId, studyId, ct);
         var assignments = AssignmentsByTaskId(resp);
 
-        var tasks = JsonUtil.ArrayOf(resp, "tasks")
+        var matchingTasks = JsonUtil.ArrayOf(resp, "tasks")
             .Where(t => include_completed == true || !IsCompleted(assignments.GetValueOrDefault(t.Int("id") ?? -1)))
+            .Where(filter.Matches)
+            .ToList();
+        var page = filter.Page(matchingTasks);
+        var tasks = page.Items
             .Select(t => ShapeTask(t, assignments.GetValueOrDefault(t.Int("id") ?? -1), include_content == true))
             .ToList();
 
@@ -35,7 +57,11 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
             stream_id = streamId,
             study_id = studyId,
             subject = subjectName,
+            total_count = page.TotalCount,
             task_count = tasks.Count,
+            limit = page.Limit,
+            offset = page.Offset,
+            has_more = page.HasMore,
             tasks,
         });
     }
@@ -84,7 +110,9 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                   "it graded; within the current semester, already-overdue-but-still-pending tasks are included " +
                   "with no cutoff, since those are exactly the ones worth surfacing. Tasks without a deadline " +
                   "are omitted unless include_no_deadline=true (then listed separately in `no_deadline`). Pass include_completed=true for a 'what have I already " +
-                  "turned in' view instead of (or in addition to) 'what's still pending'.")]
+                   "turned in' view instead of (or in addition to) 'what's still pending'. The response always " +
+                   "includes is_partial, warnings and failed_subjects; if any subject fails, use the returned " +
+                   "items as a partial digest and tell the user which subjects could not be read.")]
     public async Task<string> GetUpcomingHomework(
         [Description("How many days ahead to look. Default 7.")] int? days_ahead = null,
         [Description("Also include tasks that already look graded/completed. Default false.")] bool? include_completed = null,
@@ -96,11 +124,9 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
         var horizon = DateTimeOffset.UtcNow.AddDays(days_ahead ?? 7);
         var studies = await ctx.ListCurrentStudiesAsync(streamId, ct);
 
-        var fetched = await Task.WhenAll(studies.Select(async s =>
+        var fetched = await StudyFetch.AllAsync(studies, async (studyId, token) =>
         {
-            var studyId = s.Int("id");
-            if (studyId is null) return (dated: [], undated: new List<object>());
-            var resp = await api.GetTasksAsync(streamId, studyId.Value, ct);
+            var resp = await api.GetTasksAsync(streamId, studyId, token);
             var assignments = AssignmentsByTaskId(resp);
             var pending = JsonUtil.ArrayOf(resp, "tasks")
                 .Where(t => include_completed == true || !IsCompleted(assignments.GetValueOrDefault(t.Int("id") ?? -1)))
@@ -110,7 +136,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                 .Select(t =>
                 {
                     var deadline = DateTimeOffset.Parse(t.Str("pivot_end_at")!);
-                    return (deadline, subject: s.Str("verbose_name"), studyId: studyId.Value, task: t,
+                    return (deadline, task: t,
                         assignment: assignments.GetValueOrDefault(t.Int("id") ?? -1));
                 })
                 .Where(x => x.deadline <= horizon)
@@ -119,22 +145,34 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
                 ? pending.Where(t => t["pivot_end_at"] is null)
                     .Select(t => (object)new
                     {
-                        subject = s.Str("verbose_name"),
-                        study_id = studyId.Value,
                         task = ShapeTask(t, assignments.GetValueOrDefault(t.Int("id") ?? -1), includeContent: false),
                     }).ToList()
                 : new List<object>();
-            return (dated, undated);
-        }));
-        var perSubject = fetched.Select(f => f.dated);
-        var noDeadline = fetched.SelectMany(f => f.undated).ToList();
+            return new StudyHomework(dated, undated);
+        }, ct);
+        var noDeadline = fetched.Where(result => result.Value is not null)
+            .SelectMany(result => result.Value!.Undated.Select(task => (object)new
+            {
+                subject = result.Subject,
+                study_id = result.StudyId,
+                task,
+            }))
+            .ToList();
 
-        var due = perSubject.SelectMany(x => x)
+        var due = fetched.Where(result => result.Value is not null)
+            .SelectMany(result => result.Value!.Dated.Select(item => new
+            {
+                item.deadline,
+                subject = result.Subject,
+                study_id = result.StudyId,
+                item.task,
+                item.assignment,
+            }))
             .OrderBy(x => x.deadline)
             .Select(x => new
             {
                 subject = x.subject,
-                study_id = x.studyId,
+                study_id = x.study_id,
                 deadline = x.deadline.ToString("yyyy-MM-dd HH:mm"),
                 days_left = Math.Round((x.deadline - DateTimeOffset.UtcNow).TotalDays, 1),
                 overdue = x.deadline < DateTimeOffset.UtcNow,
@@ -146,6 +184,14 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
         {
             stream_id = streamId,
             horizon_days = days_ahead ?? 7,
+            is_partial = fetched.Any(result => result.Error is not null),
+            warnings = StudyFetch.Warnings(fetched),
+            failed_subjects = fetched.Where(result => result.Error is not null).Select(result => new
+            {
+                study_id = result.StudyId,
+                subject = result.Subject,
+                error = result.Error,
+            }),
             due_count = due.Count,
             due,
             no_deadline = include_no_deadline == true ? noDeadline : null,
@@ -257,7 +303,7 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
             .Where(a => a.Int("task_id") is not null)
             .ToDictionary(a => a.Int("task_id")!.Value, a => a);
 
-    private static bool IsCompleted(JsonObject? assignment) => assignment?.Int("status") is 3 or 6;
+    internal static bool IsCompleted(JsonObject? assignment) => assignment?.Int("status") is 3 or 6;
 
     private static object ShapeTask(JsonObject t, JsonObject? assignment = null, bool includeContent = false) => new
     {
@@ -309,6 +355,10 @@ public sealed class HomeworkTools(ForlabsApi api, ForlabsContext ctx)
             _ => "unknown",
         };
     }
+
+    private sealed record StudyHomework(
+        (DateTimeOffset deadline, JsonObject task, JsonObject? assignment)[] Dated,
+        List<object> Undated);
 
     private static string? Truncate(string? s, int max) =>
         s is null ? null : s.Length <= max ? s : s[..max] + "…";
