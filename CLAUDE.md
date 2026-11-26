@@ -5,10 +5,13 @@ MCP server (C#/.NET 10, stdio transport) exposing a read-only view of the Forlab
 ## Commands
 
 ```
-dotnet build src/ForlabsMcp -c Release     # what CI runs; no test project exists
+dotnet build src/ForlabsMcp -c Release
+dotnet test tests/ForlabsMcp.Tests -c Release
 dotnet publish src/ForlabsMcp -c Release -o publish
 nix flake check                            # CI also runs this
 ```
+
+For every behavior change, add or update focused unit tests and run the test project before considering the work complete. CI runs the same tests on pushes and pull requests; release builds depend on the test job passing. Documentation-only changes do not need tests.
 
 Runtime needs `FORLABS_USERNAME` / `FORLABS_PASSWORD` (optional: `FORLABS_BASE_URL`, `FORLABS_DOWNLOAD_DIR`). Never commit credentials.
 
@@ -26,7 +29,7 @@ Adding a tool: endpoint wrapper in `ForlabsApi` → tool method in the relevant 
 
 - Strictly read-only. Don't add submission/test-taking/chat-reply flows without a HAR capture of them.
 - Undocumented enums (assignment `status`, study `status` 2=current/3=finished, `pivot_status` unrelated to grading) are documented in the README "Limitations" and in doc comments — keep both updated when you learn more.
-- Schedule `upperweek` is unreliable; week parity is anchored to the calendar week of "today" (see `ScheduleMath`).
+- Schedule date resolution uses ISO week parity (odd = lower, even = upper), reported in each resolved result because Forlabs does not expose the calendar mapping. Use the resolved date/week tools; do not infer parity from `upperweek` or raw entry ordering (see `ScheduleMath` and the Forlabs skill).
 - Course program: `get_course_materials` = chapter index, `get_course_chapter` = chapter + blocks. Test questions are not exposed (endpoints never captured).
 - Nix: changing a `PackageReference` requires regenerating `nix/deps.json` (see README).
 - Releases: tag `vX.Y.Z` → GitHub Actions builds raw single-file binaries (standalone + runtime-dependent) for 5 platforms.

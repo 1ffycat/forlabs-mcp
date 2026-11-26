@@ -35,9 +35,7 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
 
         var (grid, schedule) = await FetchGridAndSchedule(streamId, ct);
         var positions = grid?["grid"]?["positions"]?.AsArray().ToList() ?? [];
-        var today = TodayLocal();
-
-        var dayIndex = ScheduleMath.ResolveDayIndex(target, today);
+        var dayIndex = ScheduleMath.ResolveDayIndex(target);
         var lessons = JsonUtil.ArrayOf(schedule, "entries")
             .Where(e => e.Int("day") == dayIndex)
             .OrderBy(e => e.Int("position"))
@@ -48,6 +46,8 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
         {
             date = target.ToString("yyyy-MM-dd"),
             weekday = ScheduleMath.WeekdayRu[ScheduleMath.IsoWeekday(target)],
+            week_type = ScheduleMath.WeekType(target),
+            week_parity_basis = ScheduleMath.WeekParityBasis,
             stream_id = streamId,
             lesson_count = lessons.Count,
             lessons,
@@ -68,13 +68,12 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
 
         var (grid, schedule) = await FetchGridAndSchedule(streamId, ct);
         var positions = grid?["grid"]?["positions"]?.AsArray().ToList() ?? [];
-        var today = TodayLocal();
         var entries = JsonUtil.ArrayOf(schedule, "entries").ToList();
 
         var days = Enumerable.Range(0, 7).Select(offset =>
         {
             var d = monday.AddDays(offset);
-            var dayIndex = ScheduleMath.ResolveDayIndex(d, today);
+            var dayIndex = ScheduleMath.ResolveDayIndex(d);
             var lessons = entries
                 .Where(e => e.Int("day") == dayIndex)
                 .OrderBy(e => e.Int("position"))
@@ -88,13 +87,20 @@ public sealed class ScheduleTools(ForlabsApi api, ForlabsContext ctx)
             };
         }).ToList();
 
-        return JsonUtil.Pretty(new { week_of = monday.ToString("yyyy-MM-dd"), stream_id = streamId, days });
+        return JsonUtil.Pretty(new
+        {
+            week_of = monday.ToString("yyyy-MM-dd"),
+            week_type = ScheduleMath.WeekType(monday),
+            week_parity_basis = ScheduleMath.WeekParityBasis,
+            stream_id = streamId,
+            days,
+        });
     }
 
     [McpServerTool(Name = "forlabs_get_raw_two_week_schedule"),
      Description("Returns the full raw two-week rotating schedule (all entries tagged with Forlabs' internal " +
-                  "day index 1-14, where 1-7 is the calendar week containing today as of this call and 8-14 " +
-                  "is the following week) plus the grid metadata (lesson time slots). Prefer " +
+                  "day index 1-14, where 1-7 is the lower week and 8-14 is the upper week) plus the grid " +
+                  "metadata (lesson time slots). Prefer " +
                   "forlabs_get_schedule_for_date / forlabs_get_schedule_for_week for normal use; use this only " +
                   "when you need the complete unresolved rotation.")]
     public async Task<string> GetRawTwoWeekSchedule(

@@ -18,6 +18,8 @@ jobs:
 
       - run: dotnet build src/ForlabsMcp -c Release
 
+      - run: dotnet test tests/ForlabsMcp.Tests -c Release
+
   flake-check:
     runs-on: ubuntu-latest
     steps:

@@ -22,6 +22,10 @@ Read-only view of Forlabs. Nothing can be submitted or replied to through these 
 **What is due / what is missing**
 - `forlabs_get_upcoming_homework` **skips tasks without a deadline** unless `include_no_deadline=true` (they come in a separate `no_deadline` array). It also hides assignments with status 6 (see pitfalls); use `forlabs_get_homework` per subject for those.
 
+**Schedule**
+- For a specific date use `forlabs_get_schedule_for_date`; for weekly planning use `forlabs_get_schedule_for_week`. The resolver maps odd ISO weeks to the lower block (day indices 1-7) and even ISO weeks to the upper block (8-14). Read the returned `week_type` and `week_parity_basis`; this is an explicit assumption because Forlabs does not expose the calendar-to-rotation mapping.
+- Do not determine upper/lower week from the raw schedule's ordering or `upperweek` metadata. Raw indices 1-7 represent lower-week days, and 8-14 represent upper-week days; prefer resolved tools to avoid mixing weeks.
+
 **Course materials** (lectures, textbooks): `forlabs_get_course_materials` (index) -> `forlabs_get_course_chapter`. Courses can be large; delegate to the `forlabs-course-researcher` agent. Most subjects have empty courses.
 
 ## Pitfalls

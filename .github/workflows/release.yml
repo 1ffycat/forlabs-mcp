@@ -9,7 +9,19 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet test tests/ForlabsMcp.Tests -c Release
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       matrix:
